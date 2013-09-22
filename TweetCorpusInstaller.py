@@ -37,8 +37,8 @@ class TweetCorpusInstaller(object):
 
 #     init the Twython api and set up the tweeter credentials
     def initTwython(self):
-        APP_KEY = 'QmoAI3KYEeTQU4KSA3MZFA'
-        APP_SECRET = '5GhZhIzlDeNPFVCnC9nONZimsH5rP2ciAPsc2TglS54'
+        APP_KEY = 'Your_API_KEY'
+        APP_SECRET = 'YOUR_API_SECRET'
         twitter = Twython(APP_KEY, APP_SECRET, oauth_version=2)
         ACCESS_TOKEN = twitter.obtain_access_token()
         self.twitter = Twython(APP_KEY, access_token=ACCESS_TOKEN)
