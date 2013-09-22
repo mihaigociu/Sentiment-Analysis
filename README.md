@@ -3,8 +3,8 @@ Sentiment-Analysis
 
 Python Sentiment Analysis
 
-# train and classify sentiments
-# s = SentimentAnalysis()
+train and classify sentiments
+s = SentimentAnalysis()
 
 # load the TweetCorups sentiments
 # note - you'll need to run the TweetCorupsInstaller first
