@@ -34,11 +34,11 @@ s.train()
 
 once you called the train function you can start classifing to classify sentence use
 
-# s.classify(sentence)
+s.classify(sentence)
 
-# or a paragraph
+or a paragraph
 
-# s.classifyParagraph(p)
+s.classifyParagraph(p)
 
 you can also classify a url, there are two variable here, one is the url and the second is the method which the text will be processed by, either via looping through the paragraphs and returning the accumulative positive-negative value
 
