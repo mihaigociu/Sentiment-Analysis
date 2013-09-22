@@ -1,0 +1,275 @@
+import sys
+import nltk.classify.util
+from nltk.classify import NaiveBayesClassifier
+from nltk.corpus import movie_reviews
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+
+import urllib2
+from goose import Goose
+from bs4 import BeautifulSoup
+from bs4 import Comment
+
+from TextSummarizer import summarizer
+
+# train and classify sentiments
+# s = SentimentAnalysis()
+
+# load the TweetCorups sentiments
+# note - you'll need to run the TweetCorupsInstaller first
+# s.initTwitterSentiments(0.8)
+
+# load the nltk movie reviews sentiments
+# s.initMovieReviews(0.75)
+
+# train a list of sentiments
+# neg_tweets = ['I do not like this car','I feel tired this morning', 'the concert sucks' ]
+# s.addSentiments(neg_tweets, 'negative')
+# s.addSentiments(['bad bad bad concert'], 'negative')
+
+# once you are done adding data, call the train method
+# s.train()
+
+# once you called the train function you can start classifing
+# to classify sentence use
+# s.classify(sentence)
+
+# or a paragraph
+# s.classifyParagraph(p)
+
+# you can also classify a url
+# there are two variable here, one is the url
+# and the second is the method which the text will be 
+# processed by, either via looping through the paragraphs
+# and returning the accumulative positive-negative value
+# s.classifyURL(url, False)
+# or by summarizing the text first and analysing the summarized version
+# s.classifyURL(url)
+class SentimentAnalysis(object):
+    
+    def __init__(self):
+#         words will look like this once we add pos and neg sentiments to it
+#         [
+#             ( { 'I': True, 'love': True, 'this': True, 'car': True, 'view': True }, 'pos'),
+#             ( { 'concert': True, 'was': True, 'bad': True }, 'neg' )
+#         ]
+        self.words = []
+#       we'll use this list to track the FreqDist of each word   
+        self.all_words = []
+#         these will be our training and testing lists
+#         when we initilize the differnet trainer data we'll
+#         add the entries to these lists, and when we call the 'train()'
+#         method these will be the base of the training to be passed to the NaiveBayesClassifier
+        self.trainfeats = []
+        self.testfeats = []
+        
+#     load a custom corups file and return it as a list
+#     we use this to load the twitter corups files which have
+#     already formated and has been filtered for no words
+    def loadCorups(self, filename):
+        reader = open(filename, 'r' )
+        return [line.replace('\n', '').split(',') for line in reader.readlines()]
+    
+
+# ====================================================================================================    
+# ====================================================================================================    
+# ====================================================================================================    
+
+# Training methods:
+
+#     setup the nltk corpus movie reviews as the
+#     NaiveBayesClassifier positive and negative data
+    def initMovieReviews(self, split=0.75):
+#         load the right categories - fields
+        negids = movie_reviews.fileids('neg')
+        posids = movie_reviews.fileids('pos')
+#         arrange each entry in the  following manner
+#         ( { 'I': True, 'love': True, 'this': True, 'car': True, 'view': True }, 'pos')
+        negfeats = [ (self.getWordsDict(movie_reviews.words(fileids=[f])), 'negative') for f in negids ]
+        posfeats = [ (self.getWordsDict(movie_reviews.words(fileids=[f])), 'positive') for f in posids ]
+#         calculate the cutoff for each category
+        negcutoff = int( round( len(negfeats)*split ) )
+        poscutoff = int( round( len(posfeats)*split ) )
+#         set the tarinfeats and test feats accordignly
+        self.trainfeats.extend( negfeats[:negcutoff] + posfeats[:poscutoff] )
+        self.testfeats.extend( negfeats[negcutoff:] + posfeats[poscutoff:] )
+        
+#     similar to the nltk corups movie reviews this will load
+#     the twitter corups sentiment and will add them to the 
+#     trainfeats and testfeats to be ready for training
+#     note - in order to use the twitter corups you'll need to
+#     follow the TweetCorupsInstaller first, other wise you wont have access
+#     to the data files    
+    def initTwitterSentiments(self, split=0.75):
+#         load the corups files and convert them to a list
+        poslist = self.loadCorups('twittercorups/positive.txt')
+        neglist = self.loadCorups('twittercorups/negative.txt')
+#         arrange each entry in the  following manner
+#         ( { 'I': True, 'love': True, 'this': True, 'car': True, 'view': True }, 'pos')
+        posfeats = [ (self.getWordsDict(f), 'positive') for f in poslist ]
+        negfeats = [ (self.getWordsDict(f), 'negative') for f in neglist ]
+#         calculate the cutoff for each category
+        negcutoff = int( round( len(negfeats)*split ) )
+        poscutoff = int( round( len(posfeats)*split ) )    
+#         set the tarinfeats and test feats accordignly    
+        self.trainfeats.extend( negfeats[:negcutoff] + posfeats[:poscutoff] )
+        self.testfeats.extend( negfeats[negcutoff:] + posfeats[poscutoff:] )
+        
+#     here we'll handle a custom setup, incase we added any custom 
+#     items to one of the categories, note that you do not need 
+#     to call this method is it is being executed within the train function
+    def customSetup(self, split=0.75):
+#         calculate the cutoff
+        cutoff = int( round( len(self.words) * split , 0 ) )
+#         set the tarinfeats and test feats accordignly
+        self.trainfeats.extend( self.words[:cutoff] )
+        self.testfeats.extend( self.words[cutoff:] )             
+        
+#     define and train the NaiveBayesClassifier
+#     with the trainfeats and testfeats lists
+#     first we add any remaining words from the custom words list
+#     which we may have added sentiments - categories to
+#     then we simply define the classifier and display its most importnat features and accuracy level
+    def train(self, split=0.75):
+#         add any custom sentiments to the training list
+        self.customSetup(split)
+        print 'train on %d instances, test on %d instances' % (len(self.trainfeats), len(self.testfeats))
+#         define the classifier and train it
+        self.classifier = NaiveBayesClassifier.train(self.trainfeats)
+#         show the most important features - the features that repeat most and 
+#         most likely to have most impact on our calssifing process
+        self.classifier.show_most_informative_features()
+#         print the accuracy if we want to
+        print 'accuracy:', nltk.classify.util.accuracy(self.classifier, self.testfeats)
+
+# ====================================================================================================    
+# ====================================================================================================    
+# ====================================================================================================    
+
+# add sentiments methods
+# use these to add custom sentiment or sentiments lists to 
+# the classifier.
+# when a sentiment is being added first we tokeinze it
+# then we remove any stop words from it, convert it into a binary format
+# and sort it in our words list
+    
+    def addPositiveSentiment(self, sentence):
+        self.addSentiment(sentence, 'positive')
+        
+    def addNegativeSentiment(self, sentence):
+        self.addSentiment(sentence, 'negative')
+    
+    def addSentiment(self, sentence, sentiment):
+        w = self.removeStopWords(self.tokenize(sentence))
+        self.all_words.extend(w)
+        self.words.append( (self.getWordsDict(w), sentiment) )   
+    
+    def addSentiments(self, sentences, sentiment):
+        for s in sentences:
+            self.addSentiment(s, sentiment)
+            
+# ====================================================================================================    
+# ====================================================================================================    
+# ====================================================================================================    
+
+# tokenizing, filtering and cleaning methods         
+# we use these to tokenize and remove stop words as well
+# as organize the words in a binary format when each has a True value
+# followin this format
+# { 'I': True, 'love': True, 'this': True, 'car': True, 'view': True }, 
+        
+    def getWordsDict(self, words):
+        return dict( [ (word, True) for word in words ] )
+    
+    def tokenize(self, sentence):
+        return word_tokenize(sentence)
+    
+    def removeStopWords(self, words):
+        return [w.lower() for w in words if not w in stopwords.words('english') and  len(w) >= 3]
+    
+#   split a paragraph into sentences.
+#   you can use the following replace and split functions or the nltk sentence tokenizer
+#   content = content.replace("\n", ". ")
+#   return content.split(". ")
+    def splitToSentences(self, content):
+        tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
+        return tokenizer.tokenize(content)
+    
+#    split text into paragraphs
+#    need to find out if there is a better way to do this with nltk
+    def splitToParagraphs(self, content):
+        return content.split("\n\n")
+    
+# ====================================================================================================    
+# ====================================================================================================    
+# ====================================================================================================    
+
+# classify
+# once we trained the classifier we can start using it
+# this will return the name of the category the classifier
+# found relevant for the sentence we passed it to
+# classifier.classify('I love ice cream')
+# will return 'positive' (hopefully)
+
+#     classify the sentiment of one sentence
+    def classify(self, sentence):
+        w = self.removeStopWords(self.tokenize(sentence))
+        return self.classifier.classify( self.getWordsDict(w) )
+    
+#     classify the sentimant of a paragraph
+#     firs we'll split the paragraph in to sentences and 
+#     check the sentment of each then return the tottal sentiment 
+#     ratio between the sentences in the paragraph
+#     the following paragraph may test as negative 2 and positive one,
+#     which indicate that the paragraph contain 2 negative sentences and one positive sentence
+#     p = "When Liddabit Sweets opened their new bricks and mortar store in Chelsea Market three weeks ago they also debuted a few new products, including a Chocolate Chip Toffee Cookie ($3.50)."
+#     p += "As you might expect from a company that made its name from caramels and candy bars, this cookie sits on the sweet side of the cookie spectrum. The chocolate chips, toffee and even the dough are all very sugar-centric. Its well-baked but not quite crispy at the edges this cookie is all about whats inside."  
+#     print classifier.classifyParagraph(p)
+#     {'positive': 1, 'negative': 2}
+    def classifyParagraph(self, paragraph):
+        sentences = self.splitToSentences(paragraph)
+        sentiments = {}
+        for sentence in sentences:
+            sentiment = self.classify(sentence)
+            if sentiment in sentiments:
+                sentiments[sentiment] = sentiments[sentiment] + 1
+            else:
+                sentiments[sentiment] = 1
+        return sentiments
+        
+
+#     when we check the sentiment of a url we can choose two paths
+#     the first will be to simply run through each paragraph and return 
+#     the accumulative value of its sentiements
+#     the second approach is to first summarize the text and find
+#     the most importent sentences in it, then run the sentimant
+#     classifier to find out under which categories these sentences fall
+    def classifyURL(self, url, summerize=True):
+        
+#         get a clean version of the content first
+         g = Goose()
+         article = g.extract( url=url )
+         content = article.cleaned_text
+         
+#          if we want to check the sentiment on a summarized version of the content
+         if summerize == True:
+            sm = summarizer()
+            max_len = 255
+            sentence_dictionary = sm.rankSentences( content )  
+            summary = sm.summarize(content, sentence_dictionary, False)
+#             print 'Classify -->', summary
+            return self.classifyParagraph( summary )             
+         else:
+#             do a manual analysis for each paragraph
+#             and return the total ratio
+            paragraphs = self.splitToParagraphs(content)
+            sentiments = {}
+            for paragraph in paragraphs:
+                o = self.classifyParagraph(paragraph)
+                for s in o:
+                    if s in sentiments:
+                        sentiments[s] = sentiments[s] + o[s]
+                    else:
+                        sentiments[s] = o[s]
+            return sentiments
+            
